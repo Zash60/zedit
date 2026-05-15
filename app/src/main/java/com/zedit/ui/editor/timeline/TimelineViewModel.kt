@@ -17,6 +17,8 @@ class TimelineViewModel @Inject constructor(
     private val timelinePlayer: TimelinePlayer
 ) : ViewModel() {
 
+    val player: TimelinePlayer get() = timelinePlayer
+
     private val _state = MutableStateFlow(TimelineState())
     val state: StateFlow<TimelineState> = _state.asStateFlow()
 
@@ -142,6 +144,7 @@ class TimelineViewModel @Inject constructor(
         isRestoringState = true
         val previousState = undoStack.removeLast()
         _state.value = previousState
+        timelinePlayer.rebuildComposition(previousState.tracks)
         isRestoringState = false
     }
 
@@ -151,6 +154,7 @@ class TimelineViewModel @Inject constructor(
         isRestoringState = true
         val nextState = redoStack.removeLast()
         _state.value = nextState
+        timelinePlayer.rebuildComposition(nextState.tracks)
         isRestoringState = false
     }
 

@@ -8,7 +8,8 @@ import androidx.media3.common.EditedMediaItem
 import androidx.media3.common.EditedMediaItemSequence
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.effect.SpeedChangeEffect
+import androidx.media3.exoplayer.CompositionPlayer
 import com.zedit.ui.editor.timeline.ClipState
 import com.zedit.ui.editor.timeline.TrackState
 import com.zedit.ui.editor.timeline.TrackType
@@ -31,7 +32,7 @@ class TimelinePlayer @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
+    val exoPlayer: CompositionPlayer = CompositionPlayer.Builder(context).build()
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -71,11 +72,10 @@ class TimelinePlayer @Inject constructor(
     @Suppress("UnstableApiUsage")
     fun rebuildComposition(tracks: List<TrackState>) {
         val composition = buildComposition(tracks)
-        val mediaItems = extractMediaItems(composition)
 
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        exoPlayer.setMediaItems(mediaItems)
+        exoPlayer.setComposition(composition)
         exoPlayer.prepare()
         exoPlayer.seekTo(0)
         _currentPositionMs.value = 0L
@@ -129,26 +129,17 @@ class TimelinePlayer @Inject constructor(
     @Suppress("UnstableApiUsage")
     private fun buildEditedMediaItem(clip: ClipState): EditedMediaItem {
         val mediaItem = MediaItem.fromUri(Uri.parse(clip.sourceUri))
-        return EditedMediaItem.Builder(mediaItem)
+        val builder = EditedMediaItem.Builder(mediaItem)
             .setClippingConfiguration(
                 ClippingConfiguration.Builder()
                     .setStartPositionMs(clip.trimInMs)
                     .setEndPositionMs(clip.trimOutMs)
                     .build()
             )
-            .build()
-    }
-
-    @Suppress("UnstableApiUsage")
-    private fun extractMediaItems(composition: Composition): List<MediaItem> {
-        val items = mutableListOf<MediaItem>()
-        for (i in 0 until composition.sequences.size) {
-            val sequence = composition.sequences[i]
-            for (j in 0 until sequence.editedMediaItems.size) {
-                items.add(sequence.editedMediaItems[j].mediaItem)
-            }
+        if (Math.abs(clip.speed - 1.0f) > 0.01f) {
+            builder.setEffects(listOf(SpeedChangeEffect(clip.speed)))
         }
-        return items
+        return builder.build()
     }
 
     private fun startPositionUpdates() {

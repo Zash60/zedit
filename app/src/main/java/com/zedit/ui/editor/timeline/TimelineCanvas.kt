@@ -54,8 +54,6 @@ fun TimelineCanvas(
     val textMeasurer = rememberTextMeasurer()
     val scrollState = rememberScrollState()
 
-    var showSpeedDialog by remember { mutableStateOf(false) }
-
     val canMerge = state.selectedClipId != null && state.tracks.any { track ->
         track.clips.any { it.id == state.selectedClipId } && track.clips.size >= 2
     }
@@ -95,20 +93,10 @@ fun TimelineCanvas(
             onZoomToFit = onZoomToFit,
             onSplit = onSplit,
             onMerge = onMerge,
-            onSpeed = { showSpeedDialog = true }
+            onSpeed = {}
         )
     }
 
-    if (showSpeedDialog) {
-        val selectedClip = state.tracks.flatMap { it.clips }.find { it.id == state.selectedClipId }
-        if (selectedClip != null) {
-            SpeedControlDialog(
-                currentSpeed = selectedClip.speed,
-                onSpeedChange = { newSpeed -> onSpeedChange(selectedClip.id, newSpeed) },
-                onDismiss = { showSpeedDialog = false }
-            )
-        }
-    }
 }
 
 

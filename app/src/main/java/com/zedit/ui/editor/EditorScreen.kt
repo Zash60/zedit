@@ -1,6 +1,7 @@
 package com.zedit.ui.editor
 
 import android.net.Uri
+import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,7 +17,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.zedit.data.media.MediaUriManager
 import com.zedit.ui.editor.timeline.*
 import com.zedit.permissions.getVideoPermission
@@ -129,19 +133,22 @@ fun EditorScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (hasClips) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "\u25B6",
-                            fontSize = 48.sp,
-                            color = Color.DarkGray
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Video Preview",
-                            fontSize = 14.sp,
-                            color = Color.Gray
-                        )
-                    }
+                    AndroidView(
+                        factory = { context ->
+                            PlayerView(context).apply {
+                                player = viewModel.player.exoPlayer
+                                useController = true
+                                setShowNextButton(false)
+                                setShowPreviousButton(false)
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
