@@ -91,6 +91,21 @@ class TimelineViewModel @Inject constructor(
         _state.update { it.copy(zoomLevel = zoom.coerceIn(2f, 500f)) }
     }
 
+    fun zoomIn() {
+        _state.update { it.copy(zoomLevel = (it.zoomLevel * 1.25f).coerceAtMost(500f)) }
+    }
+
+    fun zoomOut() {
+        _state.update { it.copy(zoomLevel = (it.zoomLevel / 1.25f).coerceAtLeast(2f)) }
+    }
+
+    fun zoomToFit(durationMs: Long, canvasWidthPx: Float) {
+        if (durationMs > 0 && canvasWidthPx > 0) {
+            val zoom = (canvasWidthPx * 1000f / durationMs).coerceIn(2f, 500f)
+            _state.update { it.copy(zoomLevel = zoom) }
+        }
+    }
+
     fun selectClip(clipId: Long?) {
         _state.update { it.copy(selectedClipId = clipId) }
     }
