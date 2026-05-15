@@ -35,6 +35,7 @@ fun EditorScreen(
     val mediaUriManager = remember { MediaUriManager(context.applicationContext) }
 
     var showSpeedDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
     var selectedSpeedClipId by remember { mutableStateOf<Long?>(null) }
     var timelineWidth by remember { mutableFloatStateOf(1000f) }
 
@@ -143,9 +144,7 @@ fun EditorScreen(
                 },
                 onUndo = { viewModel.undo() },
                 onRedo = { viewModel.redo() },
-                onExport = {
-                    exportViewModel.startExport(projectId, state.tracks)
-                },
+                onExport = { showExportDialog = true },
                 onAddMedia = {
                     val intent = mediaUriManager.createVideoPickerIntent(allowMultiple = true)
                     videoPickerLauncher.launch(intent)
@@ -199,15 +198,17 @@ fun EditorScreen(
         }
     }
 
-    if (exportState !is ExportUiState.Idle) {
-        ExportProgressUi(
+    if (showExportDialog) {
+        ExportDialog(
             state = exportState,
-            onCancel = { exportViewModel.cancelExport() },
-            onDismiss = { exportViewModel.resetState() },
+            onExport = { exportViewModel.startExport(projectId, state.tracks) },
+            onCancel = { exportViewModel.cancelExport(); showExportDialog = false },
+            onDismiss = { exportViewModel.resetState(); showExportDialog = false },
             onRetry = {
                 exportViewModel.resetState()
                 exportViewModel.startExport(projectId, state.tracks)
-            }
+            },
+            onOpenGallery = { /* future: open gallery app */ }
         )
     }
 }
