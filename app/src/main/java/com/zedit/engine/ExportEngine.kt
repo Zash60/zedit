@@ -9,6 +9,8 @@ import androidx.media3.common.EditedMediaItemSequence
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.effect.SpeedChangeEffect
+import androidx.media3.transformer.ExportException
+import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import com.zedit.ui.editor.timeline.ClipState
 import com.zedit.ui.editor.timeline.TrackState
@@ -107,8 +109,8 @@ class ExportEngine @Inject constructor(
             // 6. Bridge the callback-based Transformer API into a suspend function
             suspendCancellableCoroutine<Unit> { continuation ->
                 transformer.addListener(object : Transformer.Listener {
-                    override fun onCompleted(transformer: Transformer, outputPath: String) {
-                        val uri = Uri.fromFile(File(outputPath))
+                    override fun onCompleted(composition: Composition, result: ExportResult) {
+                        val uri = Uri.fromFile(File(result.outputPath))
                         _exportState.value = ExportState.Completed(uri)
                         onComplete(uri)
                         if (continuation.isActive) {
@@ -116,17 +118,17 @@ class ExportEngine @Inject constructor(
                         }
                     }
 
-                    override fun onError(transformer: Transformer, exception: Exception) {
+                    override fun onError(
+                        composition: Composition,
+                        result: ExportResult,
+                        exception: ExportException
+                    ) {
                         _exportState.value = ExportState.Error(
                             exception.message ?: "Unknown export error"
                         )
                         if (continuation.isActive) {
                             continuation.resume(Unit)
                         }
-                    }
-
-                    override fun onProgressChanged(transformer: Transformer, progress: Float) {
-                        _exportState.value = ExportState.Progress(progress)
                     }
                 })
 

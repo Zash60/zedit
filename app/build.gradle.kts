@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.activity.compose)
 
     // Media3
+    implementation(libs.media3.common)
     implementation(libs.media3.transformer)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
