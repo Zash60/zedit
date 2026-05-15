@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zedit.data.model.ClipEntity
 import com.zedit.data.repository.ProjectRepository
+import com.zedit.engine.TimelinePlayer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -12,7 +13,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TimelineViewModel @Inject constructor(
-    private val projectRepository: ProjectRepository
+    private val projectRepository: ProjectRepository,
+    private val timelinePlayer: TimelinePlayer
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TimelineState())
@@ -78,6 +80,7 @@ class TimelineViewModel @Inject constructor(
                         projectId = projectId
                     )
                 }
+                timelinePlayer.rebuildComposition(trackStates)
             }
             .launchIn(viewModelScope)
     }
@@ -109,12 +112,19 @@ class TimelineViewModel @Inject constructor(
         _state.update { it.copy(selectedClipId = clipId) }
     }
 
-    fun togglePlay() {
-        _state.update { it.copy(isPlaying = !it.isPlaying) }
+    fun play() {
+        timelinePlayer.play()
+        _state.update { it.copy(isPlaying = true) }
     }
 
-    fun setPlaying(isPlaying: Boolean) {
-        _state.update { it.copy(isPlaying = isPlaying) }
+    fun pause() {
+        timelinePlayer.pause()
+        _state.update { it.copy(isPlaying = false) }
+    }
+
+    fun seekTo(positionMs: Long) {
+        timelinePlayer.seekTo(positionMs)
+        _state.update { it.copy(playheadPositionMs = positionMs) }
     }
 
     fun saveUndoState() {
@@ -284,5 +294,10 @@ class TimelineViewModel @Inject constructor(
         val clampedSpeed = newSpeed.coerceIn(0.25f, 4.0f)
         saveUndoState()
         updateClipInDb(clip.copy(speed = clampedSpeed))
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        timelinePlayer.release()
     }
 }

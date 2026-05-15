@@ -1,0 +1,172 @@
+package com.zedit.engine
+
+import android.content.Context
+import android.net.Uri
+import androidx.media3.common.ClippingConfiguration
+import androidx.media3.common.Composition
+import androidx.media3.common.EditedMediaItem
+import androidx.media3.common.EditedMediaItemSequence
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import com.zedit.ui.editor.timeline.ClipState
+import com.zedit.ui.editor.timeline.TrackState
+import com.zedit.ui.editor.timeline.TrackType
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class TimelinePlayer @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+
+    private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
+
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+
+    private val _currentPositionMs = MutableStateFlow(0L)
+    val currentPositionMs: StateFlow<Long> = _currentPositionMs.asStateFlow()
+
+    private var positionUpdateJob: Job? = null
+    private var playerScope: CoroutineScope? = null
+
+    fun play() {
+        exoPlayer.play()
+        _isPlaying.value = true
+        startPositionUpdates()
+    }
+
+    fun pause() {
+        exoPlayer.pause()
+        _isPlaying.value = false
+        stopPositionUpdates()
+    }
+
+    fun seekTo(positionMs: Long) {
+        exoPlayer.seekTo(positionMs)
+        _currentPositionMs.value = positionMs
+    }
+
+    fun getCurrentPosition(): Long = exoPlayer.currentPosition
+
+    fun isPlaying(): Boolean = exoPlayer.isPlaying
+
+    fun release() {
+        stopPositionUpdates()
+        exoPlayer.release()
+    }
+
+    @Suppress("UnstableApiUsage")
+    fun rebuildComposition(tracks: List<TrackState>) {
+        val composition = buildComposition(tracks)
+        val mediaItems = extractMediaItems(composition)
+
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        exoPlayer.setMediaItems(mediaItems)
+        exoPlayer.prepare()
+        exoPlayer.seekTo(0)
+        _currentPositionMs.value = 0L
+    }
+
+    @Suppress("UnstableApiUsage")
+    private fun buildComposition(tracks: List<TrackState>): Composition {
+        val videoTracks = tracks
+            .filter { it.type == TrackType.VIDEO && !it.isMuted }
+            .sortedBy { it.sortOrder }
+
+        val videoClips = videoTracks
+            .flatMap { track -> track.clips }
+            .sortedBy { it.startPositionMs }
+
+        val audioTracks = tracks
+            .filter { it.type == TrackType.AUDIO && !it.isMuted }
+
+        val audioClips = audioTracks
+            .flatMap { it.clips }
+            .sortedBy { it.startPositionMs }
+
+        val sequences = mutableListOf<EditedMediaItemSequence>()
+
+        if (videoClips.isNotEmpty()) {
+            sequences.add(
+                EditedMediaItemSequence(
+                    *videoClips.map { clip -> buildEditedMediaItem(clip) }.toTypedArray()
+                )
+            )
+        }
+
+        if (audioClips.isNotEmpty()) {
+            sequences.add(
+                EditedMediaItemSequence(
+                    *audioClips.map { clip -> buildEditedMediaItem(clip) }.toTypedArray()
+                )
+            )
+        }
+
+        if (sequences.isEmpty()) {
+            return Composition.Builder(EditedMediaItemSequence()).build()
+        }
+
+        return Composition.Builder(
+            sequences[0],
+            *sequences.drop(1).toTypedArray()
+        ).build()
+    }
+
+    @Suppress("UnstableApiUsage")
+    private fun buildEditedMediaItem(clip: ClipState): EditedMediaItem {
+        val mediaItem = MediaItem.fromUri(Uri.parse(clip.sourceUri))
+        return EditedMediaItem.Builder(mediaItem)
+            .setClippingConfiguration(
+                ClippingConfiguration.Builder()
+                    .setStartPositionMs(clip.trimInMs)
+                    .setEndPositionMs(clip.trimOutMs)
+                    .build()
+            )
+            .build()
+    }
+
+    @Suppress("UnstableApiUsage")
+    private fun extractMediaItems(composition: Composition): List<MediaItem> {
+        val items = mutableListOf<MediaItem>()
+        for (i in 0 until composition.sequences.size) {
+            val sequence = composition.sequences[i]
+            for (j in 0 until sequence.editedMediaItems.size) {
+                items.add(sequence.editedMediaItems[j].mediaItem)
+            }
+        }
+        return items
+    }
+
+    private fun startPositionUpdates() {
+        stopPositionUpdates()
+        val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        playerScope = scope
+        positionUpdateJob = scope.launch {
+            while (isActive) {
+                _currentPositionMs.value = exoPlayer.currentPosition
+                delay(100L)
+            }
+        }
+    }
+
+    private fun stopPositionUpdates() {
+        positionUpdateJob?.cancel()
+        playerScope?.cancel()
+        playerScope = null
+        positionUpdateJob = null
+    }
+}
