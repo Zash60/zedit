@@ -2,13 +2,13 @@ package com.zedit.engine
 
 import android.content.Context
 import android.net.Uri
-import androidx.media3.common.ClippingConfiguration
-import androidx.media3.common.Composition
-import androidx.media3.common.EditedMediaItem
-import androidx.media3.common.EditedMediaItemSequence
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
-import androidx.media3.common.effect.SpeedChangeEffect
+import androidx.media3.effect.SpeedChangeEffect
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
@@ -86,8 +86,7 @@ class ExportEngine @Inject constructor(
             // 3. Create Composition
             // First sequence = video (+ its audio), subsequent sequences = additional audio
             val composition = Composition.Builder(
-                videoSequence,
-                audioSequence
+                listOf(videoSequence, audioSequence)
             ).build()
 
             // 4. Create output file in app-internal cache
@@ -160,7 +159,7 @@ class ExportEngine @Inject constructor(
     private fun buildEditedMediaItem(clip: ClipState): EditedMediaItem {
         val mediaItem = MediaItem.fromUri(Uri.parse(clip.sourceUri))
 
-        val clippingConfiguration = ClippingConfiguration.Builder()
+        val clippingConfiguration = MediaItem.ClippingConfiguration.Builder()
             .setStartPositionMs(clip.trimInMs)
             .setEndPositionMs(clip.trimOutMs)
             .build()
@@ -169,7 +168,7 @@ class ExportEngine @Inject constructor(
             .setClippingConfiguration(clippingConfiguration)
 
         if (Math.abs(clip.speed - 1.0f) > 0.01f) {
-            itemBuilder.setEffects(listOf(SpeedChangeEffect(clip.speed)))
+            itemBuilder.setEffects(Effects(listOf(SpeedChangeEffect(clip.speed)), emptyList()))
         }
 
         return itemBuilder.build()

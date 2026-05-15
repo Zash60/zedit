@@ -2,14 +2,14 @@ package com.zedit.engine
 
 import android.content.Context
 import android.net.Uri
-import androidx.media3.common.ClippingConfiguration
-import androidx.media3.common.Composition
-import androidx.media3.common.EditedMediaItem
-import androidx.media3.common.EditedMediaItemSequence
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.common.effect.SpeedChangeEffect
-import androidx.media3.exoplayer.CompositionPlayer
+import androidx.media3.effect.SpeedChangeEffect
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.CompositionPlayer
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.Effects
 import com.zedit.ui.editor.timeline.ClipState
 import com.zedit.ui.editor.timeline.TrackState
 import com.zedit.ui.editor.timeline.TrackType
@@ -102,28 +102,21 @@ class TimelinePlayer @Inject constructor(
 
         if (videoClips.isNotEmpty()) {
             sequences.add(
-                EditedMediaItemSequence(
-                    *videoClips.map { clip -> buildEditedMediaItem(clip) }.toTypedArray()
-                )
+                EditedMediaItemSequence(videoClips.map { clip -> buildEditedMediaItem(clip) })
             )
         }
 
         if (audioClips.isNotEmpty()) {
             sequences.add(
-                EditedMediaItemSequence(
-                    *audioClips.map { clip -> buildEditedMediaItem(clip) }.toTypedArray()
-                )
+                EditedMediaItemSequence(audioClips.map { clip -> buildEditedMediaItem(clip) })
             )
         }
 
         if (sequences.isEmpty()) {
-            return Composition.Builder(EditedMediaItemSequence()).build()
+            return Composition.Builder(EditedMediaItemSequence(emptyList())).build()
         }
 
-        return Composition.Builder(
-            sequences[0],
-            *sequences.drop(1).toTypedArray()
-        ).build()
+        return Composition.Builder(sequences).build()
     }
 
     @Suppress("UnstableApiUsage")
@@ -131,13 +124,13 @@ class TimelinePlayer @Inject constructor(
         val mediaItem = MediaItem.fromUri(Uri.parse(clip.sourceUri))
         val builder = EditedMediaItem.Builder(mediaItem)
             .setClippingConfiguration(
-                ClippingConfiguration.Builder()
+                MediaItem.ClippingConfiguration.Builder()
                     .setStartPositionMs(clip.trimInMs)
                     .setEndPositionMs(clip.trimOutMs)
                     .build()
             )
         if (Math.abs(clip.speed - 1.0f) > 0.01f) {
-            builder.setEffects(listOf(SpeedChangeEffect(clip.speed)))
+            builder.setEffects(Effects(listOf(SpeedChangeEffect(clip.speed)), emptyList()))
         }
         return builder.build()
     }
