@@ -25,7 +25,7 @@ jobs:
         run: ./gradlew :app:dependencies --configuration debugRuntimeClasspath
 
       - name: Build with Gradle
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace --refresh-dependencies
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

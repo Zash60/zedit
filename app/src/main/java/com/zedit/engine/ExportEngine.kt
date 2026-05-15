@@ -3,6 +3,7 @@ package com.zedit.engine
 import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Effect
 import androidx.media3.common.MimeTypes
 import androidx.media3.effect.SpeedChangeEffect
 import androidx.media3.transformer.Composition
@@ -72,7 +73,6 @@ class ExportEngine @Inject constructor(
                 .sortedBy { it.startPositionMs }
 
             val videoItems = videoClips.map { clip -> buildEditedMediaItem(clip) }
-            val videoSequence = EditedMediaItemSequence(videoItems)
 
             // 2. Build audio sequence from all unmuted tracks
             val audioClips = tracks
@@ -81,13 +81,23 @@ class ExportEngine @Inject constructor(
                 .sortedBy { it.startPositionMs }
 
             val audioItems = audioClips.map { clip -> buildEditedMediaItem(clip) }
-            val audioSequence = EditedMediaItemSequence(audioItems)
+
+            // 3. Build sequences (EditedMediaItemSequence constructor is private in Media3 1.10.0)
+            val sequenceList = mutableListOf<EditedMediaItemSequence>()
+            if (videoItems.isNotEmpty()) {
+                val videoSeqBuilder = EditedMediaItemSequence.Builder(videoItems.first())
+                videoItems.drop(1).forEach { videoSeqBuilder.add(it) }
+                sequenceList.add(videoSeqBuilder.build())
+            }
+            if (audioItems.isNotEmpty()) {
+                val audioSeqBuilder = EditedMediaItemSequence.Builder(audioItems.first())
+                audioItems.drop(1).forEach { audioSeqBuilder.add(it) }
+                sequenceList.add(audioSeqBuilder.build())
+            }
 
             // 3. Create Composition
             // First sequence = video (+ its audio), subsequent sequences = additional audio
-            val composition = Composition.Builder(
-                listOf(videoSequence, audioSequence)
-            ).build()
+            val composition = Composition.Builder(sequenceList).build()
 
             // 4. Create output file in app-internal cache
             val outputDir = File(context.cacheDir, "exports")
@@ -109,7 +119,7 @@ class ExportEngine @Inject constructor(
             suspendCancellableCoroutine<Unit> { continuation ->
                 transformer.addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, result: ExportResult) {
-                        val uri = Uri.fromFile(File(result.outputPath))
+                        val uri = Uri.fromFile(outputFile)
                         _exportState.value = ExportState.Completed(uri)
                         onComplete(uri)
                         if (continuation.isActive) {
@@ -157,18 +167,19 @@ class ExportEngine @Inject constructor(
     }
 
     private fun buildEditedMediaItem(clip: ClipState): EditedMediaItem {
-        val mediaItem = MediaItem.fromUri(Uri.parse(clip.sourceUri))
-
-        val clippingConfiguration = MediaItem.ClippingConfiguration.Builder()
-            .setStartPositionMs(clip.trimInMs)
-            .setEndPositionMs(clip.trimOutMs)
+        val mediaItem = MediaItem.Builder()
+            .setUri(Uri.parse(clip.sourceUri))
+            .setClippingConfiguration(
+                MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(clip.trimInMs)
+                    .setEndPositionMs(clip.trimOutMs)
+                    .build()
+            )
             .build()
 
         val itemBuilder = EditedMediaItem.Builder(mediaItem)
-            .setClippingConfiguration(clippingConfiguration)
-
         if (Math.abs(clip.speed - 1.0f) > 0.01f) {
-            itemBuilder.setEffects(Effects(listOf(SpeedChangeEffect(clip.speed)), emptyList()))
+            itemBuilder.setEffects(Effects(mutableListOf<Effect>(SpeedChangeEffect(clip.speed)), mutableListOf()))
         }
 
         return itemBuilder.build()

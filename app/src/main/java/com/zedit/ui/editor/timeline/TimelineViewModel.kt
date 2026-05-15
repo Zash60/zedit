@@ -3,6 +3,7 @@ package com.zedit.ui.editor.timeline
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zedit.data.model.ClipEntity
+import com.zedit.data.model.TrackEntity
 import com.zedit.data.repository.ProjectRepository
 import com.zedit.engine.TimelinePlayer
 import dagger.hilt.android.lifecycle.HiltViewModel

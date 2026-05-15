@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.Effect
 import androidx.media3.effect.SpeedChangeEffect
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.CompositionPlayer
@@ -22,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -98,22 +100,26 @@ class TimelinePlayer @Inject constructor(
             .flatMap { it.clips }
             .sortedBy { it.startPositionMs }
 
+        val videoItems = videoClips.map { clip -> buildEditedMediaItem(clip) }
+        val audioItems = audioClips.map { clip -> buildEditedMediaItem(clip) }
+
         val sequences = mutableListOf<EditedMediaItemSequence>()
 
-        if (videoClips.isNotEmpty()) {
-            sequences.add(
-                EditedMediaItemSequence(videoClips.map { clip -> buildEditedMediaItem(clip) })
-            )
+        if (videoItems.isNotEmpty()) {
+            val videoSeqBuilder = EditedMediaItemSequence.Builder(videoItems.first())
+            videoItems.drop(1).forEach { videoSeqBuilder.add(it) }
+            sequences.add(videoSeqBuilder.build())
         }
 
-        if (audioClips.isNotEmpty()) {
-            sequences.add(
-                EditedMediaItemSequence(audioClips.map { clip -> buildEditedMediaItem(clip) })
-            )
+        if (audioItems.isNotEmpty()) {
+            val audioSeqBuilder = EditedMediaItemSequence.Builder(audioItems.first())
+            audioItems.drop(1).forEach { audioSeqBuilder.add(it) }
+            sequences.add(audioSeqBuilder.build())
         }
 
         if (sequences.isEmpty()) {
-            return Composition.Builder(EditedMediaItemSequence(emptyList())).build()
+            val dummy = EditedMediaItem.Builder(MediaItem.Builder().build()).build()
+            return Composition.Builder(EditedMediaItemSequence.Builder(dummy).build()).build()
         }
 
         return Composition.Builder(sequences).build()
@@ -121,16 +127,18 @@ class TimelinePlayer @Inject constructor(
 
     @Suppress("UnstableApiUsage")
     private fun buildEditedMediaItem(clip: ClipState): EditedMediaItem {
-        val mediaItem = MediaItem.fromUri(Uri.parse(clip.sourceUri))
-        val builder = EditedMediaItem.Builder(mediaItem)
+        val mediaItem = MediaItem.Builder()
+            .setUri(Uri.parse(clip.sourceUri))
             .setClippingConfiguration(
                 MediaItem.ClippingConfiguration.Builder()
                     .setStartPositionMs(clip.trimInMs)
                     .setEndPositionMs(clip.trimOutMs)
                     .build()
             )
+            .build()
+        val builder = EditedMediaItem.Builder(mediaItem)
         if (Math.abs(clip.speed - 1.0f) > 0.01f) {
-            builder.setEffects(Effects(listOf(SpeedChangeEffect(clip.speed)), emptyList()))
+            builder.setEffects(Effects(mutableListOf<Effect>(SpeedChangeEffect(clip.speed)), mutableListOf()))
         }
         return builder.build()
     }
