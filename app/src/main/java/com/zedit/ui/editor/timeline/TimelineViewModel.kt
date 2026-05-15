@@ -190,4 +190,61 @@ class TimelineViewModel @Inject constructor(
             )
         }
     }
+
+    fun setPlayheadFromDrag(positionMs: Long) {
+        _state.update { it.copy(playheadPositionMs = positionMs.coerceIn(0, it.projectDurationMs)) }
+    }
+
+    fun commitTrim(clipId: Long, newTrimIn: Long, newTrimOut: Long) {
+        val state = _state.value
+        val track = state.tracks.firstOrNull { t -> t.clips.any { it.id == clipId } } ?: return
+        val clip = track.clips.first { it.id == clipId }
+
+        val clampedTrimIn = newTrimIn.coerceAtLeast(0)
+        val clampedTrimOut = newTrimOut.coerceAtLeast(clampedTrimIn + 100)
+
+        saveUndoState()
+        updateClipInDb(clip.copy(trimInMs = clampedTrimIn, trimOutMs = clampedTrimOut))
+        selectClip(clipId)
+    }
+
+    fun splitClipAtPlayhead() {
+        val state = _state.value
+        val clipId = state.selectedClipId ?: return
+        val playhead = state.playheadPositionMs
+
+        val track = state.tracks.firstOrNull { t -> t.clips.any { it.id == clipId } } ?: return
+        val clip = track.clips.first { it.id == clipId }
+
+        if (playhead <= clip.startPositionMs || playhead >= clip.endPositionMs) return
+
+        val splitOffsetMs = playhead - clip.startPositionMs
+        val splitTrimOut = clip.trimInMs + (splitOffsetMs * clip.speed).toLong()
+        val splitTrimIn = splitTrimOut
+
+        saveUndoState()
+
+        viewModelScope.launch {
+            projectRepository.updateClip(
+                ClipEntity(
+                    id = clip.id,
+                    trackId = clip.trackId,
+                    sourceUri = clip.sourceUri,
+                    startPositionMs = clip.startPositionMs,
+                    trimInMs = clip.trimInMs,
+                    trimOutMs = splitTrimOut,
+                    speed = clip.speed
+                )
+            )
+
+            projectRepository.addClipToTrack(
+                trackId = clip.trackId,
+                sourceUri = clip.sourceUri,
+                startPositionMs = playhead,
+                trimInMs = splitTrimIn,
+                trimOutMs = clip.trimOutMs,
+                speed = clip.speed
+            )
+        }
+    }
 }

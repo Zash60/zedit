@@ -2,6 +2,9 @@ package com.zedit.ui.editor.timeline
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.ScrollState
@@ -16,8 +19,11 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -28,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zedit.ui.theme.*
+import kotlin.math.abs
 
 
 @Composable
@@ -36,6 +43,10 @@ fun TimelineCanvas(
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onZoomToFit: () -> Unit,
+    onSelectClip: (Long?) -> Unit,
+    onPlayheadDrag: (Long) -> Unit,
+    onTrimCommit: (Long, Long, Long) -> Unit,
+    onSplit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -60,15 +71,20 @@ fun TimelineCanvas(
                 state = state,
                 textMeasurer = textMeasurer,
                 scrollState = scrollState,
+                onSelectClip = onSelectClip,
+                onPlayheadDrag = onPlayheadDrag,
+                onTrimCommit = onTrimCommit,
                 modifier = Modifier.weight(1f)
             )
         }
 
-        ZoomControls(
+        BottomControls(
             zoomLevel = state.zoomLevel,
+            selectedClipId = state.selectedClipId,
             onZoomIn = onZoomIn,
             onZoomOut = onZoomOut,
-            onZoomToFit = onZoomToFit
+            onZoomToFit = onZoomToFit,
+            onSplit = onSplit
         )
     }
 }
@@ -79,6 +95,9 @@ private fun TimelineContent(
     state: TimelineState,
     textMeasurer: TextMeasurer,
     scrollState: ScrollState,
+    onSelectClip: (Long?) -> Unit,
+    onPlayheadDrag: (Long) -> Unit,
+    onTrimCommit: (Long, Long, Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -106,7 +125,8 @@ private fun TimelineContent(
             TimeRulerCanvas(
                 state = state,
                 width = contentWidthDp,
-                textMeasurer = textMeasurer
+                textMeasurer = textMeasurer,
+                onPlayheadDrag = onPlayheadDrag
             )
 
             state.tracks.forEach { track ->
@@ -114,7 +134,9 @@ private fun TimelineContent(
                     track = track,
                     state = state,
                     width = contentWidthDp,
-                    textMeasurer = textMeasurer
+                    textMeasurer = textMeasurer,
+                    onSelectClip = onSelectClip,
+                    onTrimCommit = onTrimCommit
                 )
             }
         }
@@ -158,12 +180,35 @@ private fun TrackHeader(
 private fun TimeRulerCanvas(
     state: TimelineState,
     width: Dp,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    onPlayheadDrag: (Long) -> Unit
 ) {
     Canvas(
         modifier = Modifier
             .width(width)
             .height(32.dp)
+            .pointerInput(state.zoomLevel) {
+                detectTapGestures { offset ->
+                    val positionMs = (offset.x * 1000f / state.zoomLevel).toLong()
+                        .coerceIn(0, state.projectDurationMs)
+                    onPlayheadDrag(positionMs)
+                }
+            }
+            .pointerInput(state.zoomLevel) {
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        val positionMs = (offset.x * 1000f / state.zoomLevel).toLong()
+                            .coerceIn(0, state.projectDurationMs)
+                        onPlayheadDrag(positionMs)
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val positionMs = (change.position.x * 1000f / state.zoomLevel).toLong()
+                            .coerceIn(0, state.projectDurationMs)
+                        onPlayheadDrag(positionMs)
+                    }
+                )
+            }
     ) {
         drawRect(color = RulerColor, size = size)
 
@@ -211,17 +256,115 @@ private fun TimeRulerCanvas(
 }
 
 
+private class TrimDragState(
+    val clipId: Long,
+    val edge: TrimEdge,
+    val originalTrimInMs: Long,
+    val originalTrimOutMs: Long,
+    val startX: Float,
+    val clipSpeed: Float
+)
+
+private enum class TrimEdge { LEFT, RIGHT }
+
 @Composable
 private fun TrackLaneCanvas(
     track: TrackState,
     state: TimelineState,
     width: Dp,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    onSelectClip: (Long?) -> Unit,
+    onTrimCommit: (Long, Long, Long) -> Unit
 ) {
+    val density = LocalDensity.current
+    val edgeThresholdPx = with(density) { 12.dp.toPx() }
+    val zoomLevel = state.zoomLevel
+
+    var trimPreview by remember { mutableStateOf<TrimDragState?>(null) }
+    var previewTrimInMs by remember { mutableLongStateOf(0L) }
+    var previewTrimOutMs by remember { mutableLongStateOf(0L) }
+
     Canvas(
         modifier = Modifier
             .width(width)
             .height(64.dp)
+            .pointerInput(zoomLevel, state.selectedClipId, track) {
+                detectTapGestures { offset ->
+                    val clickedClip = track.clips.find { clip ->
+                        val clipX = clip.startPositionMs * zoomLevel / 1000f
+                        val clipW = clip.durationMs * zoomLevel / 1000f
+                        offset.x in clipX..(clipX + clipW)
+                    }
+                    onSelectClip(clickedClip?.id)
+                }
+            }
+            .pointerInput(zoomLevel, state.selectedClipId, edgeThresholdPx, track) {
+                detectDragGestures(
+                    onDragStart = { startOffset ->
+                        val selectedClip = track.clips.firstOrNull { it.id == state.selectedClipId }
+                            ?: return@detectDragGestures
+
+                        val clipX = selectedClip.startPositionMs * zoomLevel / 1000f
+                        val clipW = selectedClip.durationMs * zoomLevel / 1000f
+                        val clipRight = clipX + clipW
+
+                        when {
+                            abs(startOffset.x - clipX) < edgeThresholdPx -> {
+                                trimPreview = TrimDragState(
+                                    clipId = selectedClip.id,
+                                    edge = TrimEdge.LEFT,
+                                    originalTrimInMs = selectedClip.trimInMs,
+                                    originalTrimOutMs = selectedClip.trimOutMs,
+                                    startX = startOffset.x,
+                                    clipSpeed = selectedClip.speed
+                                )
+                                previewTrimInMs = selectedClip.trimInMs
+                                previewTrimOutMs = selectedClip.trimOutMs
+                            }
+                            abs(startOffset.x - clipRight) < edgeThresholdPx -> {
+                                trimPreview = TrimDragState(
+                                    clipId = selectedClip.id,
+                                    edge = TrimEdge.RIGHT,
+                                    originalTrimInMs = selectedClip.trimInMs,
+                                    originalTrimOutMs = selectedClip.trimOutMs,
+                                    startX = startOffset.x,
+                                    clipSpeed = selectedClip.speed
+                                )
+                                previewTrimInMs = selectedClip.trimInMs
+                                previewTrimOutMs = selectedClip.trimOutMs
+                            }
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        val drag = trimPreview ?: return@detectDragGestures
+                        change.consume()
+
+                        val deltaPx = change.position.x - drag.startX
+                        val deltaMs = (deltaPx * 1000f / zoomLevel * drag.clipSpeed).toLong()
+
+                        when (drag.edge) {
+                            TrimEdge.LEFT -> {
+                                previewTrimInMs = (drag.originalTrimInMs + deltaMs)
+                                    .coerceIn(0, drag.originalTrimOutMs - 100)
+                                previewTrimOutMs = drag.originalTrimOutMs
+                            }
+                            TrimEdge.RIGHT -> {
+                                previewTrimOutMs = (drag.originalTrimOutMs + deltaMs)
+                                    .coerceAtLeast(drag.originalTrimInMs + 100)
+                                previewTrimInMs = drag.originalTrimInMs
+                            }
+                        }
+                    },
+                    onDragEnd = {
+                        val drag = trimPreview ?: return@detectDragGestures
+                        onTrimCommit(drag.clipId, previewTrimInMs, previewTrimOutMs)
+                        trimPreview = null
+                    },
+                    onDragCancel = {
+                        trimPreview = null
+                    }
+                )
+            }
     ) {
         drawRect(color = TrackBackground, size = size)
 
@@ -231,14 +374,52 @@ private fun TrackLaneCanvas(
         }
 
         for (clip in track.clips) {
-            drawClip(
-                clip = clip,
-                zoomLevel = state.zoomLevel,
-                isSelected = clip.id == state.selectedClipId,
-                laneHeight = size.height,
-                clipColor = clipColor,
-                textMeasurer = textMeasurer
-            )
+            val isSelected = clip.id == state.selectedClipId
+            val isTrimming = trimPreview?.clipId == clip.id
+
+            if (isTrimming) {
+                drawClip(
+                    clip = clip,
+                    zoomLevel = zoomLevel,
+                    isSelected = true,
+                    laneHeight = size.height,
+                    clipColor = clipColor,
+                    textMeasurer = textMeasurer,
+                    overrideTrimInMs = previewTrimInMs,
+                    overrideTrimOutMs = previewTrimOutMs
+                )
+
+                val trimX = if (trimPreview?.edge == TrimEdge.LEFT) {
+                    clip.startPositionMs * zoomLevel / 1000f
+                } else {
+                    clip.startPositionMs * zoomLevel / 1000f +
+                        ((previewTrimOutMs - previewTrimInMs) / clip.speed * zoomLevel / 1000f)
+                }.coerceIn(0f, size.width)
+
+                val path = Path().apply {
+                    moveTo(trimX, 0f)
+                    lineTo(trimX, size.height)
+                }
+                drawPath(
+                    path = path,
+                    color = PlayheadRed.copy(alpha = 0.5f),
+                    style = Stroke(
+                        width = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(
+                            floatArrayOf(6.dp.toPx(), 4.dp.toPx()), 0f
+                        )
+                    )
+                )
+            } else {
+                drawClip(
+                    clip = clip,
+                    zoomLevel = zoomLevel,
+                    isSelected = isSelected,
+                    laneHeight = size.height,
+                    clipColor = clipColor,
+                    textMeasurer = textMeasurer
+                )
+            }
         }
 
         drawPlayhead(
@@ -256,10 +437,18 @@ private fun DrawScope.drawClip(
     isSelected: Boolean,
     laneHeight: Float,
     clipColor: Color,
-    textMeasurer: TextMeasurer
+    textMeasurer: TextMeasurer,
+    overrideTrimInMs: Long? = null,
+    overrideTrimOutMs: Long? = null
 ) {
+    val effectiveTrimInMs = overrideTrimInMs ?: clip.trimInMs
+    val effectiveTrimOutMs = overrideTrimOutMs ?: clip.trimOutMs
+    val effectiveDurationMs = if (clip.speed > 0f) {
+        ((effectiveTrimOutMs - effectiveTrimInMs) / clip.speed).toLong()
+    } else 0L
+
     val clipX = clip.startPositionMs * zoomLevel / 1000f
-    val clipWidth = clip.durationMs * zoomLevel / 1000f
+    val clipWidth = effectiveDurationMs * zoomLevel / 1000f
     val padding = 4.dp.toPx()
     val clipHeight = laneHeight - 2 * padding
     val clipY = padding
@@ -291,7 +480,7 @@ private fun DrawScope.drawClip(
     val labelStyle = TextStyle(fontSize = 11.sp, color = Color.White)
     val labelResult = textMeasurer.measure(text = label, style = labelStyle)
 
-    val durationSec = clip.durationMs / 1000f
+    val durationSec = effectiveDurationMs / 1000f
     val durationStr = "%.1fs".format(durationSec)
     val durationStyle = TextStyle(fontSize = 9.sp, color = Color.White.copy(alpha = 0.7f))
     val durationResult = textMeasurer.measure(text = durationStr, style = durationStyle)
@@ -334,6 +523,55 @@ private fun DrawScope.drawPlayhead(
             color = PlayheadRed,
             radius = 3.dp.toPx(),
             center = Offset(playheadX, 3.dp.toPx())
+        )
+    }
+}
+
+
+@Composable
+private fun BottomControls(
+    zoomLevel: Float,
+    selectedClipId: Long?,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onZoomToFit: () -> Unit,
+    onSplit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DarkSurface)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onSplit,
+                enabled = selectedClipId != null
+            ) {
+                Text(
+                    text = "\u2702",
+                    fontSize = 16.sp,
+                    color = if (selectedClipId != null) OnDarkSurface
+                    else OnDarkSurface.copy(alpha = 0.38f)
+                )
+            }
+
+            Text(
+                text = "Split",
+                fontSize = 11.sp,
+                color = if (selectedClipId != null) OnDarkSurface
+                else OnDarkSurface.copy(alpha = 0.38f)
+            )
+        }
+
+        ZoomControls(
+            zoomLevel = zoomLevel,
+            onZoomIn = onZoomIn,
+            onZoomOut = onZoomOut,
+            onZoomToFit = onZoomToFit
         )
     }
 }
