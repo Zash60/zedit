@@ -211,7 +211,7 @@ private fun TimeRulerCanvas(
                             .coerceIn(0, state.projectDurationMs)
                         onPlayheadDrag(positionMs)
                     },
-                    onDrag = { change, _ ->
+                    onHorizontalDrag = { change, _ ->
                         change.consume()
                         val positionMs = (change.position.x * 1000f / state.zoomLevel).toLong()
                             .coerceIn(0, state.projectDurationMs)
@@ -219,7 +219,7 @@ private fun TimeRulerCanvas(
                     }
                 )
             }
-    ) {
+        ) {
         drawRect(color = RulerColor, size = size)
 
         val zoom = state.zoomLevel

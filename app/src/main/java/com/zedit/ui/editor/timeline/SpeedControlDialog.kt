@@ -1,5 +1,6 @@
 package com.zedit.ui.editor.timeline
 
+import androidx.compose.foundation.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.AlertDialog
@@ -19,6 +20,7 @@ import com.zedit.ui.theme.DarkSurfaceVariant
 import com.zedit.ui.theme.OnDarkSurface
 import kotlin.math.abs
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SpeedControlDialog(
     currentSpeed: Float,

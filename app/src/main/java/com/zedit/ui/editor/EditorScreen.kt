@@ -53,22 +53,6 @@ fun EditorScreen(
     val hasClips = state.tracks.any { it.clips.isNotEmpty() }
     var showBackConfirmDialog by remember { mutableStateOf(false) }
 
-    val permissionLauncher = rememberVideoPermissionLauncher(
-        onGranted = {
-            val intent = mediaUriManager.createVideoPickerIntent(allowMultiple = true)
-            videoPickerLauncher.launch(intent)
-        },
-        onDenied = {
-            scope.launch {
-                snackbarHostState.showSnackbar("Video access permission is needed to add media files.")
-            }
-        }
-    )
-
-    LaunchedEffect(projectId) {
-        viewModel.loadProject(projectId)
-    }
-
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -87,6 +71,22 @@ fun EditorScreen(
                 }
             }
         }
+    }
+
+    val permissionLauncher = rememberVideoPermissionLauncher(
+        onGranted = {
+            val intent = mediaUriManager.createVideoPickerIntent(allowMultiple = true)
+            videoPickerLauncher.launch(intent)
+        },
+        onDenied = {
+            scope.launch {
+                snackbarHostState.showSnackbar("Video access permission is needed to add media files.")
+            }
+        }
+    )
+
+    LaunchedEffect(projectId) {
+        viewModel.loadProject(projectId)
     }
 
     val canMerge = state.selectedClipId != null && state.tracks.any { track ->
