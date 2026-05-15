@@ -3,32 +3,37 @@ package com.zedit
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.sp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.zedit.ui.navigation.Screen
+import com.zedit.ui.theme.ZeditTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
-            MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+            ZeditTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    val navController = rememberNavController()
+                    NavHost(
+                        navController = navController,
+                        startDestination = Screen.ProjectList.route
                     ) {
-                        Text(
-                            text = "Zedit",
-                            fontSize = 24.sp
-                        )
+                        composable(Screen.ProjectList.route) {
+                            // Placeholder - will be replaced by ProjectListScreen
+                            Text("Project List")
+                        }
+                        composable(Screen.Editor.route) {
+                            // Placeholder - will be replaced by EditorScreen
+                            Text("Editor")
+                        }
                     }
                 }
             }
