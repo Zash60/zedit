@@ -47,10 +47,18 @@ fun TimelineCanvas(
     onPlayheadDrag: (Long) -> Unit,
     onTrimCommit: (Long, Long, Long) -> Unit,
     onSplit: () -> Unit,
+    onMerge: () -> Unit,
+    onSpeedChange: (Long, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
     val scrollState = rememberScrollState()
+
+    var showSpeedDialog by remember { mutableStateOf(false) }
+
+    val canMerge = state.selectedClipId != null && state.tracks.any { track ->
+        track.clips.any { it.id == state.selectedClipId } && track.clips.size >= 2
+    }
 
     Column(modifier = modifier.background(TimelineBackground)) {
         if (state.projectDurationMs == 0L || state.tracks.isEmpty()) {
@@ -81,11 +89,25 @@ fun TimelineCanvas(
         BottomControls(
             zoomLevel = state.zoomLevel,
             selectedClipId = state.selectedClipId,
+            canMerge = canMerge,
             onZoomIn = onZoomIn,
             onZoomOut = onZoomOut,
             onZoomToFit = onZoomToFit,
-            onSplit = onSplit
+            onSplit = onSplit,
+            onMerge = onMerge,
+            onSpeed = { showSpeedDialog = true }
         )
+    }
+
+    if (showSpeedDialog) {
+        val selectedClip = state.tracks.flatMap { it.clips }.find { it.id == state.selectedClipId }
+        if (selectedClip != null) {
+            SpeedControlDialog(
+                currentSpeed = selectedClip.speed,
+                onSpeedChange = { newSpeed -> onSpeedChange(selectedClip.id, newSpeed) },
+                onDismiss = { showSpeedDialog = false }
+            )
+        }
     }
 }
 
@@ -532,13 +554,65 @@ private fun DrawScope.drawPlayhead(
 private fun BottomControls(
     zoomLevel: Float,
     selectedClipId: Long?,
+    canMerge: Boolean,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onZoomToFit: () -> Unit,
     onSplit: () -> Unit,
+    onMerge: () -> Unit,
+    onSpeed: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DarkSurface)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onMerge,
+                enabled = canMerge
+            ) {
+                Text(
+                    text = "\u23F9",
+                    fontSize = 16.sp,
+                    color = if (canMerge) OnDarkSurface
+                    else OnDarkSurface.copy(alpha = 0.38f)
+                )
+            }
+
+            Text(
+                text = "Merge",
+                fontSize = 11.sp,
+                color = if (canMerge) OnDarkSurface
+                else OnDarkSurface.copy(alpha = 0.38f)
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            IconButton(
+                onClick = onSpeed,
+                enabled = selectedClipId != null
+            ) {
+                Text(
+                    text = "\u23F1",
+                    fontSize = 16.sp,
+                    color = if (selectedClipId != null) OnDarkSurface
+                    else OnDarkSurface.copy(alpha = 0.38f)
+                )
+            }
+
+            Text(
+                text = "Speed",
+                fontSize = 11.sp,
+                color = if (selectedClipId != null) OnDarkSurface
+                else OnDarkSurface.copy(alpha = 0.38f)
+            )
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()

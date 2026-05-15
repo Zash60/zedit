@@ -3,7 +3,6 @@ package com.zedit.ui.editor.timeline
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zedit.data.model.ClipEntity
-import com.zedit.data.model.TrackEntity
 import com.zedit.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -246,5 +245,44 @@ class TimelineViewModel @Inject constructor(
                 speed = clip.speed
             )
         }
+    }
+
+    fun mergeClipsOnSelectedTrack() {
+        val state = _state.value
+        val clipId = state.selectedClipId ?: return
+
+        val trackIndex = state.tracks.indexOfFirst { t -> t.clips.any { it.id == clipId } }
+        if (trackIndex < 0) return
+        val track = state.tracks[trackIndex]
+        if (track.clips.size < 2) return
+
+        saveUndoState()
+        viewModelScope.launch {
+            val sortedClips = track.clips.sortedBy { it.startPositionMs }
+            var currentStart = sortedClips.first().startPositionMs
+            for (clip in sortedClips) {
+                projectRepository.updateClip(
+                    ClipEntity(
+                        id = clip.id,
+                        trackId = clip.trackId,
+                        sourceUri = clip.sourceUri,
+                        startPositionMs = currentStart,
+                        trimInMs = clip.trimInMs,
+                        trimOutMs = clip.trimOutMs,
+                        speed = clip.speed
+                    )
+                )
+                currentStart += clip.durationMs
+            }
+        }
+    }
+
+    fun setClipSpeed(clipId: Long, newSpeed: Float) {
+        val state = _state.value
+        val track = state.tracks.firstOrNull { t -> t.clips.any { it.id == clipId } } ?: return
+        val clip = track.clips.first { it.id == clipId }
+        val clampedSpeed = newSpeed.coerceIn(0.25f, 4.0f)
+        saveUndoState()
+        updateClipInDb(clip.copy(speed = clampedSpeed))
     }
 }
