@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.Effect
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.effect.SpeedChangeEffect
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.CompositionPlayer
@@ -107,13 +108,13 @@ class TimelinePlayer @Inject constructor(
 
         if (videoItems.isNotEmpty()) {
             val videoSeqBuilder = EditedMediaItemSequence.Builder(videoItems.first())
-            videoItems.drop(1).forEach { videoSeqBuilder.add(it) }
+            videoItems.drop(1).forEach { videoSeqBuilder.addItem(it) }
             sequences.add(videoSeqBuilder.build())
         }
 
         if (audioItems.isNotEmpty()) {
             val audioSeqBuilder = EditedMediaItemSequence.Builder(audioItems.first())
-            audioItems.drop(1).forEach { audioSeqBuilder.add(it) }
+            audioItems.drop(1).forEach { audioSeqBuilder.addItem(it) }
             sequences.add(audioSeqBuilder.build())
         }
 
@@ -138,7 +139,7 @@ class TimelinePlayer @Inject constructor(
             .build()
         val builder = EditedMediaItem.Builder(mediaItem)
         if (Math.abs(clip.speed - 1.0f) > 0.01f) {
-            builder.setEffects(Effects(mutableListOf<Effect>(SpeedChangeEffect(clip.speed)), mutableListOf()))
+            builder.setEffects(Effects(mutableListOf<AudioProcessor>(), mutableListOf<Effect>(SpeedChangeEffect(clip.speed))))
         }
         return builder.build()
     }

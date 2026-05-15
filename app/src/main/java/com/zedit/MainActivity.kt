@@ -10,8 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.NamedNavArgument
-import androidx.navigation.NavArgument
+import androidx.navigation.navArgument
 import androidx.navigation.compose.rememberNavController
 import com.zedit.ui.editor.EditorScreen
 import com.zedit.ui.navigation.Screen
@@ -40,7 +39,7 @@ class MainActivity : ComponentActivity() {
                         composable(
                             route = Screen.Editor.route,
                             arguments = listOf(
-                                NamedNavArgument("projectId", NavArgument.Builder().setType(NavType.LongType).build())
+                                navArgument("projectId") { type = NavType.LongType }
                             )
                         ) { backStackEntry ->
                             val projectId = backStackEntry.arguments
