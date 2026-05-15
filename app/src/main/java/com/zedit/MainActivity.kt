@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.zedit.ui.navigation.Screen
+import com.zedit.ui.projects.ProjectListScreen
 import com.zedit.ui.theme.ZeditTheme
 
 class MainActivity : ComponentActivity() {
@@ -27,8 +28,11 @@ class MainActivity : ComponentActivity() {
                         startDestination = Screen.ProjectList.route
                     ) {
                         composable(Screen.ProjectList.route) {
-                            // Placeholder - will be replaced by ProjectListScreen
-                            Text("Project List")
+                            ProjectListScreen(
+                                onProjectClicked = { projectId ->
+                                    navController.navigate(Screen.Editor.createRoute(projectId))
+                                }
+                            )
                         }
                         composable(Screen.Editor.route) {
                             // Placeholder - will be replaced by EditorScreen
