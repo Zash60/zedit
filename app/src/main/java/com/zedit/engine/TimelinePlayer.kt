@@ -31,7 +31,7 @@ class TimelinePlayer @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()

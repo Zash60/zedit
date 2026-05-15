@@ -6,11 +6,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.navArgument
 import androidx.navigation.compose.rememberNavController
+import com.zedit.ui.editor.EditorScreen
 import com.zedit.ui.navigation.Screen
 import com.zedit.ui.projects.ProjectListScreen
 import com.zedit.ui.theme.ZeditTheme
@@ -34,9 +36,18 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-                        composable(Screen.Editor.route) {
-                            // Placeholder - will be replaced by EditorScreen
-                            Text("Editor")
+                        composable(
+                            route = Screen.Editor.route,
+                            arguments = listOf(
+                                navArgument("projectId") { type = NavType.LongType }
+                            )
+                        ) { backStackEntry ->
+                            val projectId = backStackEntry.arguments
+                                ?.getLong("projectId") ?: return@composable
+                            EditorScreen(
+                                projectId = projectId,
+                                onNavigateBack = { navController.popBackStack() }
+                            )
                         }
                     }
                 }
