@@ -1,6 +1,7 @@
 package com.zedit.ui.editor
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -18,7 +19,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.zedit.data.media.MediaUriManager
 import com.zedit.ui.editor.timeline.*
+import com.zedit.permissions.getVideoPermission
+import com.zedit.permissions.isVideoPermissionGranted
+import com.zedit.permissions.rememberVideoPermissionLauncher
 import com.zedit.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +43,23 @@ fun EditorScreen(
     var showExportDialog by remember { mutableStateOf(false) }
     var selectedSpeedClipId by remember { mutableStateOf<Long?>(null) }
     var timelineWidth by remember { mutableFloatStateOf(1000f) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val hasClips = state.tracks.any { it.clips.isNotEmpty() }
+    var showBackConfirmDialog by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberVideoPermissionLauncher(
+        onGranted = {
+            val intent = mediaUriManager.createVideoPickerIntent(allowMultiple = true)
+            videoPickerLauncher.launch(intent)
+        },
+        onDenied = {
+            scope.launch {
+                snackbarHostState.showSnackbar("Video access permission is needed to add media files.")
+            }
+        }
+    )
 
     LaunchedEffect(projectId) {
         viewModel.loadProject(projectId)
@@ -91,6 +113,7 @@ fun EditorScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         containerColor = DarkBackground
     ) { padding ->
         Column(
@@ -105,18 +128,34 @@ fun EditorScreen(
                     .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "\u25B6",
-                        fontSize = 48.sp,
-                        color = Color.DarkGray
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Video Preview",
-                        fontSize = 14.sp,
-                        color = Color.Gray
-                    )
+                if (hasClips) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "\u25B6",
+                            fontSize = 48.sp,
+                            color = Color.DarkGray
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Video Preview",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                    }
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "+",
+                            fontSize = 48.sp,
+                            color = Color.DarkGray
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Add media to get started",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                    }
                 }
             }
 
@@ -125,6 +164,7 @@ fun EditorScreen(
                 selectedClipId = state.selectedClipId,
                 canMerge = canMerge,
                 zoomLevel = state.zoomLevel,
+                hasClips = hasClips,
                 onPlayPause = {
                     if (state.isPlaying) viewModel.pause()
                     else viewModel.play()
@@ -146,8 +186,12 @@ fun EditorScreen(
                 onRedo = { viewModel.redo() },
                 onExport = { showExportDialog = true },
                 onAddMedia = {
-                    val intent = mediaUriManager.createVideoPickerIntent(allowMultiple = true)
-                    videoPickerLauncher.launch(intent)
+                    if (isVideoPermissionGranted(context)) {
+                        val intent = mediaUriManager.createVideoPickerIntent(allowMultiple = true)
+                        videoPickerLauncher.launch(intent)
+                    } else {
+                        permissionLauncher.launch(getVideoPermission())
+                    }
                 }
             )
 
@@ -179,6 +223,33 @@ fun EditorScreen(
                 )
             }
         }
+    }
+
+    BackHandler(enabled = showExportDialog && (exportState is ExportUiState.Exporting || exportState is ExportUiState.Saving)) {
+        showBackConfirmDialog = true
+    }
+
+    if (showBackConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackConfirmDialog = false },
+            title = { Text("Export in Progress") },
+            text = { Text("An export is in progress. Leaving now will cancel it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBackConfirmDialog = false
+                    showExportDialog = false
+                    exportViewModel.cancelExport()
+                    onNavigateBack()
+                }) {
+                    Text("Leave")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackConfirmDialog = false }) {
+                    Text("Stay")
+                }
+            }
+        )
     }
 
     if (showSpeedDialog && selectedSpeedClipId != null) {
@@ -219,6 +290,7 @@ private fun EditorToolbar(
     selectedClipId: Long?,
     canMerge: Boolean,
     zoomLevel: Float,
+    hasClips: Boolean,
     onPlayPause: () -> Unit,
     onSplit: () -> Unit,
     onMerge: () -> Unit,
@@ -322,7 +394,7 @@ private fun EditorToolbar(
             ToolbarIconButton(
                 text = "\u2B06",
                 label = "Export",
-                enabled = true,
+                enabled = hasClips,
                 onClick = onExport
             )
         }
