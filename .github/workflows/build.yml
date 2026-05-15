@@ -21,8 +21,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Show dependency tree
+        run: ./gradlew :app:dependencies --configuration debugRuntimeClasspath
+
       - name: Build with Gradle
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --info 2>&1 | grep -E "classpath|COMPILATION|CLASSPATH|resolving|FAILED" || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
