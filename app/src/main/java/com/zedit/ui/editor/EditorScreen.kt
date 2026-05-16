@@ -1,6 +1,7 @@
 package com.zedit.ui.editor
 
 import android.net.Uri
+import android.view.SurfaceView
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -181,6 +182,23 @@ fun EditorScreen(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT
                                 )
+                                // SurfaceView renders in a separate hardware layer that can fall
+                                // behind Compose's AndroidView canvas. Force Z-order on top.
+                                post {
+                                    fun ViewGroup.findSurfaceView(): SurfaceView? {
+                                        for (i in 0 until childCount) {
+                                            val child = getChildAt(i)
+                                            when {
+                                                child is SurfaceView -> return child
+                                                child is ViewGroup -> {
+                                                    child.findSurfaceView()?.let { return it }
+                                                }
+                                            }
+                                        }
+                                        return null
+                                    }
+                                    findSurfaceView()?.setZOrderOnTop(true)
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxSize()
