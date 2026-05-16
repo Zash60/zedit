@@ -74,18 +74,20 @@ class TimelinePlayer @Inject constructor(
 
     @Suppress("UnstableApiUsage")
     fun rebuildComposition(tracks: List<TrackState>) {
-        val composition = buildComposition(tracks)
-
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
-        exoPlayer.setComposition(composition)
-        exoPlayer.prepare()
-        exoPlayer.seekTo(0)
         _currentPositionMs.value = 0L
+
+        val composition = buildComposition(tracks)
+        if (composition != null) {
+            exoPlayer.setComposition(composition)
+            exoPlayer.prepare()
+            exoPlayer.seekTo(0)
+        }
     }
 
     @Suppress("UnstableApiUsage")
-    private fun buildComposition(tracks: List<TrackState>): Composition {
+    private fun buildComposition(tracks: List<TrackState>): Composition? {
         val videoTracks = tracks
             .filter { it.type == TrackType.VIDEO && !it.isMuted }
             .sortedBy { it.sortOrder }
@@ -119,8 +121,7 @@ class TimelinePlayer @Inject constructor(
         }
 
         if (sequences.isEmpty()) {
-            val dummy = EditedMediaItem.Builder(MediaItem.Builder().build()).build()
-            return Composition.Builder(EditedMediaItemSequence.Builder(dummy).build()).build()
+            return null
         }
 
         return Composition.Builder(sequences).build()
