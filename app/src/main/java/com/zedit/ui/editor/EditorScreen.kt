@@ -21,6 +21,22 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.zedit.data.media.MediaUriManager
 import com.zedit.ui.editor.timeline.*
 import com.zedit.permissions.getVideoPermission
@@ -176,7 +192,6 @@ fun EditorScreen(
                                 useController = true
                                 setShowNextButton(false)
                                 setShowPreviousButton(false)
-                                setUseTextureView(true)
                                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                                 layoutParams = ViewGroup.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
