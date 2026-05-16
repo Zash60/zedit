@@ -27,7 +27,10 @@ import com.zedit.permissions.getVideoPermission
 import com.zedit.permissions.isVideoPermissionGranted
 import com.zedit.permissions.rememberVideoPermissionLauncher
 import com.zedit.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,22 +70,40 @@ fun EditorScreen(
                         false
                     }
                 }
-                val skippedCount = uris.size - validUris.size
-                if (skippedCount > 0) {
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            "$skippedCount file(s) could not be read. They may have been moved or deleted."
-                        )
+                scope.launch(Dispatchers.IO) {
+                    val copiedUris = validUris.mapNotNull { uri ->
+                        try {
+                            val fileName = mediaUriManager.getFileName(uri)
+                            val destDir = File(context.filesDir, "media")
+                            destDir.mkdirs()
+                            val destFile = File(destDir, "${System.currentTimeMillis()}_$fileName")
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                destFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            Uri.fromFile(destFile)
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
-                }
-                validUris.forEach { uri ->
-                    viewModel.addClipToTrack(
-                        trackId = firstVideoTrack.id,
-                        sourceUri = uri.toString(),
-                        startPositionMs = state.projectDurationMs,
-                        trimInMs = 0L,
-                        trimOutMs = 30000L
-                    )
+                    val skippedCount = uris.size - copiedUris.size
+                    withContext(Dispatchers.Main) {
+                        if (skippedCount > 0) {
+                            snackbarHostState.showSnackbar(
+                                "$skippedCount file(s) could not be copied."
+                            )
+                        }
+                        copiedUris.forEach { uri ->
+                            viewModel.addClipToTrack(
+                                trackId = firstVideoTrack.id,
+                                sourceUri = uri.toString(),
+                                startPositionMs = state.projectDurationMs,
+                                trimInMs = 0L,
+                                trimOutMs = 30000L
+                            )
+                        }
+                    }
                 }
             }
         }
