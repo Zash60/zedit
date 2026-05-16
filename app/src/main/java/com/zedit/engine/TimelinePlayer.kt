@@ -2,6 +2,7 @@ package com.zedit.engine
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.Effect
@@ -80,9 +81,14 @@ class TimelinePlayer @Inject constructor(
 
         val composition = buildComposition(tracks)
         if (composition != null) {
-            exoPlayer.setComposition(composition)
-            exoPlayer.prepare()
-            exoPlayer.seekTo(0)
+            try {
+                exoPlayer.setComposition(composition)
+                exoPlayer.prepare()
+                exoPlayer.seekTo(0)
+            } catch (e: IllegalStateException) {
+                Log.e("TimelinePlayer", "Failed to set composition: ${e.message}")
+                // Gracefully degrade — player stays stopped, timeline UI still works
+            }
         }
     }
 

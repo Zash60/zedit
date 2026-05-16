@@ -60,7 +60,22 @@ fun EditorScreen(
         if (uris.isNotEmpty()) {
             val firstVideoTrack = state.tracks.firstOrNull { it.type == TrackType.VIDEO }
             if (firstVideoTrack != null) {
-                uris.forEach { uri ->
+                val validUris = uris.filter { uri ->
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { true } ?: false
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                val skippedCount = uris.size - validUris.size
+                if (skippedCount > 0) {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "$skippedCount file(s) could not be read. They may have been moved or deleted."
+                        )
+                    }
+                }
+                validUris.forEach { uri ->
                     viewModel.addClipToTrack(
                         trackId = firstVideoTrack.id,
                         sourceUri = uri.toString(),
