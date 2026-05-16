@@ -176,6 +176,7 @@ fun EditorScreen(
                                 useController = true
                                 setShowNextButton(false)
                                 setShowPreviousButton(false)
+                                setUseTextureView(true)
                                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                                 layoutParams = ViewGroup.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
