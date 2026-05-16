@@ -83,7 +83,11 @@ class TimelineViewModel @Inject constructor(
                         projectId = projectId
                     )
                 }
-                timelinePlayer.rebuildComposition(trackStates)
+                // Only rebuild composition when there are actual clips
+                // (empty Composition causes IllegalStateException in Media3)
+                if (trackStates.any { it.clips.isNotEmpty() }) {
+                    timelinePlayer.rebuildComposition(trackStates)
+                }
             }
             .launchIn(viewModelScope)
     }
